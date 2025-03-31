@@ -1,0 +1,77 @@
+import sqlite3
+import tkinter as tk
+from tkinter import messagebox
+
+# Path to the database on the network drive (example for Windows)
+network_drive_path = r"\\NetworkDrive\folder\service_database.db"  # Update this path
+
+# Path to the database on the network drive (For linux and Mac)
+#network_drive_path = "/mnt/network_drive/folder/service_database.db
+
+# Function to get all table names from the database on the network drive
+def get_all_table_names():
+    try:
+        # Connect to the SQLite database
+        conn = sqlite3.connect(network_drive_path)  # Use the network path
+        c = conn.cursor()
+
+        # Get all table names from the database
+        c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = c.fetchall()
+        conn.close()
+
+        return [table[0] for table in tables]
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        messagebox.showerror("Database Error", f"Error occurred while fetching table names: {e}")
+        return []
+
+
+# Function to insert data into the selected table on the network database
+def insert_data(table_name, values):
+    try:
+        # Connect to the SQLite database on the network drive
+        conn = sqlite3.connect(network_drive_path)
+        c = conn.cursor()
+
+        # Construct the SQL INSERT statement
+        placeholders = ', '.join(['?' for _ in values])
+        insert_sql = f"INSERT INTO {table_name} VALUES ({placeholders})"
+
+        # Execute the SQL statement to insert the data
+        c.execute(insert_sql, values)
+        conn.commit()
+        conn.close()
+
+        messagebox.showinfo("Data Inserted", f"Data inserted into '{table_name}' successfully!")
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        messagebox.showerror("Database Error", f"Error occurred while inserting the data: {e}")
+
+
+# Create the main GUI window
+root = tk.Tk()
+root.title("Dynamic Database")
+
+
+# Example function to fetch table names and display them in a listbox
+def refresh_table_listbox():
+    tables = get_all_table_names()
+    table_listbox.delete(0, tk.END)  # Clear any existing entries
+    for table in tables:
+        table_listbox.insert(tk.END, table)
+
+
+# Main frame to list tables (GUI setup)
+main_frame = tk.Frame(root)
+main_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+
+tk.Label(main_frame, text="Select a Table to Edit").grid(row=0, column=0, padx=10, pady=10)
+
+# Scrollable listbox for tables
+table_listbox = tk.Listbox(main_frame, height=6, selectmode=tk.SINGLE)
+table_listbox.grid(row=1, column=0, padx=10, pady=10)
+refresh_table_listbox()
+
+# Start the GUI
+root.mainloop()
