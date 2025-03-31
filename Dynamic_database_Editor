@@ -1,24 +1,68 @@
 import sqlite3
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog, filedialog
+import json
+import os
 
-# Path to the database on the network drive (example for Windows)
-network_drive_path = r"\\NetworkDrive\folder\service_database.db"  # Update this path
+# Default path for configuration file (to store the database path)
+config_file_path = "db_config.json"
 
-# Path to the database on the network drive (For linux and Mac)
-#network_drive_path = "/mnt/network_drive/folder/service_database.db
 
-# Function to create a database and new table based on user input
+# Function to load the saved database path from the configuration file
+def load_database_path():
+    if os.path.exists(config_file_path):
+        with open(config_file_path, "r") as config_file:
+            config = json.load(config_file)
+            return config.get("database_path")
+    return None
+
+
+# Function to save the current database path to the configuration file
+def save_database_path(database_path):
+    with open(config_file_path, "w") as config_file:
+        json.dump({"database_path": database_path}, config_file)
+
+
+# Function to check if a database exists or needs to be created
+def check_and_create_database():
+    global network_drive_path
+
+    # Try loading the existing database path from the config file
+    saved_db_path = load_database_path()
+
+    if saved_db_path:
+        network_drive_path = saved_db_path
+        return
+
+    # If no database path is saved, prompt the user to create one
+    db_name = simpledialog.askstring("Create Database", "Enter a name for the new database:")
+    if db_name:
+        if not db_name.endswith(".db"):
+            db_name += ".db"
+        network_drive_path = r"\\NetworkDrive\folder\\" + db_name  # You can modify this path based on the network location
+        save_database_path(network_drive_path)
+
+
+# Function to prompt the user to change the database and update the reference
+def change_database():
+    global network_drive_path
+
+    # Ask user to select a new database file
+    new_db_path = filedialog.askopenfilename(title="Select Database", filetypes=[("Database Files", "*.db")])
+
+    if new_db_path:
+        network_drive_path = new_db_path
+        save_database_path(new_db_path)
+        messagebox.showinfo("Database Changed", f"Database has been changed to: {new_db_path}")
+        refresh_table_listbox()  # Refresh table list to reflect the change
+
+
+# Function to create a new table based on user input
 def create_new_table(table_name, columns):
     try:
-        # Connect to the SQLite database (creates it if not exists)
         conn = sqlite3.connect(network_drive_path)
         c = conn.cursor()
-
-        # Construct the CREATE TABLE SQL statement
         create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns})"
-
-        # Execute the SQL statement to create the table
         c.execute(create_table_sql)
         conn.commit()
         conn.close()
@@ -26,29 +70,22 @@ def create_new_table(table_name, columns):
         messagebox.showinfo("Table Created", f"Table '{table_name}' created successfully!")
         refresh_table_listbox()  # Refresh the table list after creation
     except sqlite3.Error as e:
-        print(f"Database error: {e}")
         messagebox.showerror("Database Error", f"Error occurred while creating the table: {e}")
 
 
 # Function to insert data into the newly created table
 def insert_data(table_name, values):
     try:
-        # Connect to the SQLite database
         conn = sqlite3.connect(network_drive_path)
         c = conn.cursor()
-
-        # Construct the SQL INSERT statement
         placeholders = ', '.join(['?' for _ in values])
         insert_sql = f"INSERT INTO {table_name} VALUES ({placeholders})"
-
-        # Execute the SQL statement to insert the data
         c.execute(insert_sql, values)
         conn.commit()
         conn.close()
 
         messagebox.showinfo("Data Inserted", f"Data inserted into '{table_name}' successfully!")
     except sqlite3.Error as e:
-        print(f"Database error: {e}")
         messagebox.showerror("Database Error", f"Error occurred while inserting the data: {e}")
 
 
@@ -60,7 +97,7 @@ def on_delete_table():
         confirm = messagebox.askyesno("Confirm Deletion",
                                       "You are trying to delete a table. Please confirm.\n\nDO NOT PROCEED YOU WILL DELETE DATA.\n\nDo you want to delete this table?")
         if confirm:
-            delete_table(table_name)  # Delete the table immediately
+            delete_table(table_name)
         else:
             messagebox.showinfo("Deletion Canceled", "Table deletion has been canceled.")
     else:
@@ -70,14 +107,9 @@ def on_delete_table():
 # Function to delete the table
 def delete_table(table_name):
     try:
-        # Connect to the SQLite database
         conn = sqlite3.connect(network_drive_path)
         c = conn.cursor()
-
-        # Construct the SQL DROP TABLE statement
         delete_table_sql = f"DROP TABLE IF EXISTS {table_name}"
-
-        # Execute the SQL statement to delete the table
         c.execute(delete_table_sql)
         conn.commit()
         conn.close()
@@ -85,25 +117,19 @@ def delete_table(table_name):
         messagebox.showinfo("Table Deleted", f"Table '{table_name}' has been deleted.")
         refresh_table_listbox()  # Refresh the table list after deletion
     except sqlite3.Error as e:
-        print(f"Database error: {e}")
         messagebox.showerror("Database Error", f"Error occurred while deleting the table: {e}")
 
 
 # Function to get all table names from the database
 def get_all_table_names():
     try:
-        # Connect to the SQLite database
         conn = sqlite3.connect(network_drive_path)
         c = conn.cursor()
-
-        # Get all table names from the database
         c.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = c.fetchall()
         conn.close()
-
         return [table[0] for table in tables]
     except sqlite3.Error as e:
-        print(f"Database error: {e}")
         messagebox.showerror("Database Error", f"Error occurred while fetching table names: {e}")
         return []
 
@@ -111,7 +137,7 @@ def get_all_table_names():
 # Function to populate the Listbox with all table names (clickable)
 def refresh_table_listbox():
     tables = get_all_table_names()
-    table_listbox.delete(0, tk.END)  # Clear any existing entries
+    table_listbox.delete(0, tk.END)
     for table in tables:
         table_listbox.insert(tk.END, table)
 
@@ -122,7 +148,7 @@ def on_create_table():
     columns = columns_entry.get()
 
     if table_name and columns:
-        create_new_table(table_name, columns)  # Non-blocking call to create a table
+        create_new_table(table_name, columns)
     else:
         messagebox.showerror("Invalid Input", "Please provide a table name and columns.")
 
@@ -134,45 +160,15 @@ def on_insert_data():
 
     if table_name and values:
         values = [value.strip() for value in values]
-        insert_data(table_name, values)  # Non-blocking call to insert data
+        insert_data(table_name, values)
     else:
         messagebox.showerror("Invalid Input", "Please provide a valid table name and values.")
-
-
-# Function to get all data from the table
-def get_data_from_table(table_name):
-    try:
-        # Connect to the SQLite database
-        conn = sqlite3.connect(network_drive_path)
-        c = conn.cursor()
-
-        # Select all data from the table
-        c.execute(f"SELECT * FROM {table_name}")
-        data = c.fetchall()
-        conn.close()
-
-        return data
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
-        messagebox.showerror("Database Error", f"Error occurred while fetching the data: {e}")
-        return []
-
-
-# Function to populate the Listbox with current data from the table
-def update_data_listbox(table_name):
-    data = get_data_from_table(table_name)
-    data_listbox.delete(0, tk.END)
-    if data:
-        for row in data:
-            data_listbox.insert(tk.END, row)
-    else:
-        data_listbox.insert(tk.END, "No data available.")
 
 
 # Function to set selected table name into the input field
 def on_table_select(event):
     selected_table = table_listbox.get(table_listbox.curselection())
-    delete_table_name_entry.delete(0, tk.END)  # Clear any previous entry
+    delete_table_name_entry.delete(0, tk.END)
     delete_table_name_entry.insert(tk.END, selected_table)
 
 
@@ -184,8 +180,12 @@ root.title("Dynamic Database Editor")
 root.grid_rowconfigure(0, weight=1, minsize=100)
 root.grid_rowconfigure(1, weight=1, minsize=100)
 root.grid_rowconfigure(2, weight=1, minsize=100)
+root.grid_rowconfigure(3, weight=1, minsize=100)
 
 root.grid_columnconfigure(0, weight=1, minsize=300)
+
+# Initialize the database check and creation
+check_and_create_database()
 
 # Frame for creating a new table
 create_table_frame = tk.LabelFrame(root, text="Create a New Table", padx=10, pady=10)
@@ -223,7 +223,6 @@ delete_table_frame.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
 
 tk.Label(delete_table_frame, text="Select Table to Delete:").grid(row=0, column=0, padx=5, pady=5)
 
-# Scrollable listbox for tables
 table_listbox = tk.Listbox(delete_table_frame, height=6, selectmode=tk.SINGLE)
 table_listbox.grid(row=1, column=0, padx=5, pady=5)
 table_listbox.bind('<<ListboxSelect>>', on_table_select)
@@ -237,6 +236,11 @@ delete_table_name_entry.grid(row=2, column=0, padx=5, pady=5)
 
 delete_table_button = tk.Button(delete_table_frame, text="Delete Table", command=on_delete_table)
 delete_table_button.grid(row=3, columnspan=2, pady=10)
+
+
+# Buttons for changing database and viewing about page
+change_db_button = tk.Button(root, text="Change Database", command=change_database)
+change_db_button.grid(row=4, column=0, pady=10)
 
 # Populate the table listbox at the start
 refresh_table_listbox()
