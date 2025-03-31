@@ -1,0 +1,245 @@
+import sqlite3
+import tkinter as tk
+from tkinter import messagebox
+
+# Path to the database on the network drive (example for Windows)
+network_drive_path = r"\\NetworkDrive\folder\service_database.db"  # Update this path
+
+# Path to the database on the network drive (For linux and Mac)
+#network_drive_path = "/mnt/network_drive/folder/service_database.db
+
+# Function to create a database and new table based on user input
+def create_new_table(table_name, columns):
+    try:
+        # Connect to the SQLite database (creates it if not exists)
+        conn = sqlite3.connect(network_drive_path)
+        c = conn.cursor()
+
+        # Construct the CREATE TABLE SQL statement
+        create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns})"
+
+        # Execute the SQL statement to create the table
+        c.execute(create_table_sql)
+        conn.commit()
+        conn.close()
+
+        messagebox.showinfo("Table Created", f"Table '{table_name}' created successfully!")
+        refresh_table_listbox()  # Refresh the table list after creation
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        messagebox.showerror("Database Error", f"Error occurred while creating the table: {e}")
+
+
+# Function to insert data into the newly created table
+def insert_data(table_name, values):
+    try:
+        # Connect to the SQLite database
+        conn = sqlite3.connect(network_drive_path)
+        c = conn.cursor()
+
+        # Construct the SQL INSERT statement
+        placeholders = ', '.join(['?' for _ in values])
+        insert_sql = f"INSERT INTO {table_name} VALUES ({placeholders})"
+
+        # Execute the SQL statement to insert the data
+        c.execute(insert_sql, values)
+        conn.commit()
+        conn.close()
+
+        messagebox.showinfo("Data Inserted", f"Data inserted into '{table_name}' successfully!")
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        messagebox.showerror("Database Error", f"Error occurred while inserting the data: {e}")
+
+
+# Function to delete a table after user confirmation
+def on_delete_table():
+    table_name = delete_table_name_entry.get()
+
+    if table_name:
+        confirm = messagebox.askyesno("Confirm Deletion",
+                                      "You are trying to delete a table. Please confirm.\n\nDO NOT PROCEED YOU WILL DELETE DATA.\n\nDo you want to delete this table?")
+        if confirm:
+            delete_table(table_name)  # Delete the table immediately
+        else:
+            messagebox.showinfo("Deletion Canceled", "Table deletion has been canceled.")
+    else:
+        messagebox.showerror("Invalid Input", "Please provide a table name to delete.")
+
+
+# Function to delete the table
+def delete_table(table_name):
+    try:
+        # Connect to the SQLite database
+        conn = sqlite3.connect(network_drive_path)
+        c = conn.cursor()
+
+        # Construct the SQL DROP TABLE statement
+        delete_table_sql = f"DROP TABLE IF EXISTS {table_name}"
+
+        # Execute the SQL statement to delete the table
+        c.execute(delete_table_sql)
+        conn.commit()
+        conn.close()
+
+        messagebox.showinfo("Table Deleted", f"Table '{table_name}' has been deleted.")
+        refresh_table_listbox()  # Refresh the table list after deletion
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        messagebox.showerror("Database Error", f"Error occurred while deleting the table: {e}")
+
+
+# Function to get all table names from the database
+def get_all_table_names():
+    try:
+        # Connect to the SQLite database
+        conn = sqlite3.connect(network_drive_path)
+        c = conn.cursor()
+
+        # Get all table names from the database
+        c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = c.fetchall()
+        conn.close()
+
+        return [table[0] for table in tables]
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        messagebox.showerror("Database Error", f"Error occurred while fetching table names: {e}")
+        return []
+
+
+# Function to populate the Listbox with all table names (clickable)
+def refresh_table_listbox():
+    tables = get_all_table_names()
+    table_listbox.delete(0, tk.END)  # Clear any existing entries
+    for table in tables:
+        table_listbox.insert(tk.END, table)
+
+
+# Function to handle table creation from the GUI
+def on_create_table():
+    table_name = table_name_entry.get()
+    columns = columns_entry.get()
+
+    if table_name and columns:
+        create_new_table(table_name, columns)  # Non-blocking call to create a table
+    else:
+        messagebox.showerror("Invalid Input", "Please provide a table name and columns.")
+
+
+# Function to handle data insertion from the GUI
+def on_insert_data():
+    table_name = insert_table_name_entry.get()
+    values = insert_values_entry.get().split(',')
+
+    if table_name and values:
+        values = [value.strip() for value in values]
+        insert_data(table_name, values)  # Non-blocking call to insert data
+    else:
+        messagebox.showerror("Invalid Input", "Please provide a valid table name and values.")
+
+
+# Function to get all data from the table
+def get_data_from_table(table_name):
+    try:
+        # Connect to the SQLite database
+        conn = sqlite3.connect(network_drive_path)
+        c = conn.cursor()
+
+        # Select all data from the table
+        c.execute(f"SELECT * FROM {table_name}")
+        data = c.fetchall()
+        conn.close()
+
+        return data
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        messagebox.showerror("Database Error", f"Error occurred while fetching the data: {e}")
+        return []
+
+
+# Function to populate the Listbox with current data from the table
+def update_data_listbox(table_name):
+    data = get_data_from_table(table_name)
+    data_listbox.delete(0, tk.END)
+    if data:
+        for row in data:
+            data_listbox.insert(tk.END, row)
+    else:
+        data_listbox.insert(tk.END, "No data available.")
+
+
+# Function to set selected table name into the input field
+def on_table_select(event):
+    selected_table = table_listbox.get(table_listbox.curselection())
+    delete_table_name_entry.delete(0, tk.END)  # Clear any previous entry
+    delete_table_name_entry.insert(tk.END, selected_table)
+
+
+# Create the main GUI window
+root = tk.Tk()
+root.title("Dynamic Database Editor")
+
+# Create a grid layout configuration to make all frames the same size
+root.grid_rowconfigure(0, weight=1, minsize=100)
+root.grid_rowconfigure(1, weight=1, minsize=100)
+root.grid_rowconfigure(2, weight=1, minsize=100)
+
+root.grid_columnconfigure(0, weight=1, minsize=300)
+
+# Frame for creating a new table
+create_table_frame = tk.LabelFrame(root, text="Create a New Table", padx=10, pady=10)
+create_table_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+
+tk.Label(create_table_frame, text="Table Name:").grid(row=0, column=0, padx=5, pady=5)
+table_name_entry = tk.Entry(create_table_frame)
+table_name_entry.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(create_table_frame, text="Columns (e.g., name TEXT, age INTEGER):").grid(row=1, column=0, padx=5, pady=5)
+columns_entry = tk.Entry(create_table_frame)
+columns_entry.grid(row=1, column=1, padx=5, pady=5)
+
+create_table_button = tk.Button(create_table_frame, text="Create Table", command=on_create_table)
+create_table_button.grid(row=2, columnspan=2, pady=10)
+
+# Frame for inserting data into the created table
+insert_data_frame = tk.LabelFrame(root, text="Insert Data into Table", padx=10, pady=10)
+insert_data_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+
+tk.Label(insert_data_frame, text="Table Name:").grid(row=0, column=0, padx=5, pady=5)
+insert_table_name_entry = tk.Entry(insert_data_frame)
+insert_table_name_entry.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(insert_data_frame, text="Values (comma separated):").grid(row=1, column=0, padx=5, pady=5)
+insert_values_entry = tk.Entry(insert_data_frame)
+insert_values_entry.grid(row=1, column=1, padx=5, pady=5)
+
+insert_data_button = tk.Button(insert_data_frame, text="Insert Data", command=on_insert_data)
+insert_data_button.grid(row=2, columnspan=2, pady=10)
+
+# Frame for deleting a table
+delete_table_frame = tk.LabelFrame(root, text="Delete a Table", padx=10, pady=10)
+delete_table_frame.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+
+tk.Label(delete_table_frame, text="Select Table to Delete:").grid(row=0, column=0, padx=5, pady=5)
+
+# Scrollable listbox for tables
+table_listbox = tk.Listbox(delete_table_frame, height=6, selectmode=tk.SINGLE)
+table_listbox.grid(row=1, column=0, padx=5, pady=5)
+table_listbox.bind('<<ListboxSelect>>', on_table_select)
+
+scrollbar = tk.Scrollbar(delete_table_frame, orient=tk.VERTICAL, command=table_listbox.yview)
+scrollbar.grid(row=1, column=1, sticky='ns')
+table_listbox.config(yscrollcommand=scrollbar.set)
+
+delete_table_name_entry = tk.Entry(delete_table_frame)
+delete_table_name_entry.grid(row=2, column=0, padx=5, pady=5)
+
+delete_table_button = tk.Button(delete_table_frame, text="Delete Table", command=on_delete_table)
+delete_table_button.grid(row=3, columnspan=2, pady=10)
+
+# Populate the table listbox at the start
+refresh_table_listbox()
+
+# Run the GUI
+root.mainloop()
