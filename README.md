@@ -5,7 +5,7 @@ Editor is Included
 
 
 Still Under development so database cannot be renamed atm.
-cannot handle multiple databases
+Editor can now handle multiple databases and create new ones
 Might be some bugs i dont know about
 
 
